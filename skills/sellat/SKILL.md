@@ -2,7 +2,7 @@
 name: sellat
 description: Create independently verifiable proof that an exact file or record existed at a given time and has not changed since (proof of existence, timestamping, tamper-evident audit trail). Hashes locally with SHA-256 and sends only the hash; anchors it on Polygon and Bitcoin, with an optional eIDAS qualified timestamp. Use when the user wants to timestamp, notarize, seal or protect a file, contract, photo, dataset, release or log; when an agent must leave evidence of its own outputs, decisions or execution logs; or when checking a file against an existing Sellat proof. Works with a Sellat API key or, without an account, paying per call over x402 (USDC on Base).
 license: MIT
-compatibility: Requires Node.js 18.11+ and network access to sellat.app. The pay-per-call route also needs npm packages @x402/fetch, @x402/evm and viem, and a wallet with USDC on Base set up by the user.
+compatibility: Requires Node.js 18.11+ and network access to sellat.app. The pay-per-call route also needs the npm packages @x402/fetch, @x402/evm and viem at the versions pinned in scripts/package-lock.json, and a wallet with USDC on Base set up by the user.
 metadata:
   author: sellat
   homepage: https://sellat.app/developers
@@ -63,9 +63,9 @@ that a payment accepts are always at `GET https://sellat.app/api/v2/x402`;
 read them there, do not assume them.
 
 ```bash
-npm install --prefix scripts                 # once: @x402/fetch, @x402/evm, viem
+npm ci --prefix scripts --ignore-scripts     # once: pinned @x402/fetch, @x402/evm, viem
 export SELLAT_WALLET_KEY=0x…                  # set by the user, never printed or logged
-node scripts/x402-stamp.mjs proof ./agent-run.jsonl --dry-run   # shows the offer, pays nothing
+node scripts/x402-stamp.mjs proof ./agent-run.jsonl --dry-run   # shows the offer; no wallet, pays nothing
 node scripts/x402-stamp.mjs proof ./agent-run.jsonl             # pays one proof
 node scripts/x402-stamp.mjs seal <proof-id>                      # pays one qualified timestamp
 ```
@@ -76,6 +76,15 @@ the API's answer. The **first proof of a wallet returns a read-only API key
 once**: keep it, then use Route A's read commands with it
 (`SELLAT_API_TOKEN=<that key> npx -y sellat-cli status <id>`). A failed call
 is not charged: the payment settles only after the work is done.
+
+What the script may do, and nothing else: read the file it hashes; read
+`SELLAT_WALLET_KEY` (only when paying, never printed) and `SELLAT_API_URL`
+(only `https://sellat.app`, `https://staging.sellat.app` or localhost);
+make HTTPS requests to that host, with redirects refused. It pays only an
+offer on Base, in USDC, to the `pay_to` address of the published price list.
+It never installs packages: the dependencies are pinned in
+`scripts/package-lock.json` and none has install scripts. Use a wallet
+funded only for this, with a small balance.
 
 ## Sealing an agent's own records
 
