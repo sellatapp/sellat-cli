@@ -54,8 +54,8 @@ and `node:crypto`.
 ## Commands
 
 ```console
-$ sellat stamp <file> [--name <name>] [--group <group>] [--meta key=value]... [--qualified] [--store] [--wait]
-$ sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--qualified]   # hash computed elsewhere
+$ sellat stamp <file> [--name <name>] [--group <group>] [--note <text>] [--meta key=value]... [--qualified] [--store] [--wait]
+$ sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--note <text>] [--qualified]   # hash computed elsewhere
 $ sellat status <id>                                         # state, anchors, seal, URLs
 $ sellat watch <id> [--interval <seconds>]                   # poll until anchored
 $ sellat seal <id>                                           # the qualified eIDAS seal
@@ -72,6 +72,10 @@ $ sellat original delete <id>                                # end custody; the 
   dashboard show.
 - `--group` files the proof under a group, created the first time. See
   [A whole job](#a-whole-job-one-group-one-link).
+- `--note` adds one line of your own about the file (up to 200 characters),
+  shown under its name in the dashboard and on the group's link. It is not
+  part of the proof: stamp the same file again with another `--note` to
+  change it.
 - `--meta` attaches small key=value metadata (4 KB, stored with the proof,
   never published).
 - `--wait` keeps polling until the batch is anchored and then prints the
@@ -144,8 +148,8 @@ package. A group is what the Sellat dashboard calls an evidence file
 (*expediente*): the same object, so it shows there too.
 
 - **Nothing is public until you run `sellat link`.** From then on, anyone
-  with the URL sees the group's name and each step's name: put nothing in
-  them you would not show. `--meta` is never shown. `sellat link <group>
+  with the URL sees the group's name and each step's name and note: put
+  nothing in them you would not show. `--meta` is never shown. `sellat link <group>
   --off` pauses the link; nothing is deleted.
 - **What it shows:** each record existed, exactly as it is, no later than its
   proven date, and has not changed. It does not show that the step it

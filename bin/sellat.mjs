@@ -8,8 +8,8 @@ import { fileSize, mimeTypeFor, nameFromFilename, sha256File } from '../src/hash
 const HELP = `sellat — proof of existence from your terminal (https://sellat.app)
 
 Usage:
-  sellat stamp <file> [--name <name>] [--group <group>] [--meta key=value]... [--qualified] [--store] [--wait]
-  sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--meta key=value]... [--qualified]
+  sellat stamp <file> [--name <name>] [--group <group>] [--note <text>] [--meta key=value]... [--qualified] [--store] [--wait]
+  sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--note <text>] [--meta key=value]... [--qualified]
   sellat status <id>                      the proof as it stands now
   sellat watch <id> [--interval <s>]      poll until the batch is anchored
   sellat seal <id>                        add the qualified eIDAS seal
@@ -29,7 +29,10 @@ A group is one job in several steps: stamp each step with the same --group
 and its own --name, then "sellat link" gives one URL where a person reads the
 steps in order and checks each one, without an account. Nothing is public
 until you run "sellat link"; whoever has the URL sees the group's name and
-each step's name. <group> is the name you used, or the group's id.
+each step's name and note. <group> is the name you used, or the group's id.
+--note is one optional line about the file (up to 200 characters); it is
+shown with it, is not part of the proof, and stamping the same file again
+with another --note replaces it.
 
 Add --json to any command to get the API's answer as is.
 
@@ -51,6 +54,7 @@ const { values, positionals } = parseArgs({
     out: { type: 'string' },
     lang: { type: 'string' },
     group: { type: 'string' },
+    note: { type: 'string' },
     off: { type: 'boolean' },
     qualified: { type: 'boolean' },
     store: { type: 'boolean' },
@@ -106,6 +110,7 @@ function printProof(proof) {
   console.log(`id        ${proof.id}`);
   if (proof.name) console.log(`name      ${proof.name}`);
   if (proof.group) console.log(`group     ${proof.group.name}  (${proof.group.id})`);
+  if (proof.note) console.log(`note      ${proof.note}`);
   console.log(`state     ${proof.state}`);
   console.log(`hash      ${proof.hash}`);
   for (const a of proof.anchors ?? []) {
@@ -129,7 +134,7 @@ function printProof(proof) {
     if (proof.urls.certificate) console.log(`cert      ${proof.urls.certificate}`);
   }
   if (proof.limitations?.length) {
-    console.log(`note      ${proof.limitations.join(', ')}`);
+    console.log(`limits    ${proof.limitations.join(', ')}`);
   }
 }
 
@@ -204,6 +209,7 @@ try {
       metadata: parseMetadata(values.meta),
       qualified: values.qualified,
       group: values.group,
+      note: values.note,
     });
     printProof(proof);
     if (proof.created === false && !values.json) {

@@ -136,6 +136,12 @@ test('group: create files the proof by name, list filters by group id', async ()
 
   await client.list({ group: 'g1', limit: 5 });
   assert.equal(calls[2].url, 'https://sellat.app/api/v2/proofs?limit=5&group=g1');
+
+  // The note travels only when given; an empty one is sent, because it removes the note.
+  await client.create({ hash: 'f'.repeat(64), note: 'Invoice sent to the client' });
+  assert.equal(JSON.parse(calls[3].options.body).note, 'Invoice sent to the client');
+  await client.create({ hash: 'f'.repeat(64), note: '' });
+  assert.equal(JSON.parse(calls[4].options.body).note, '');
 });
 
 test('groups: found by name, read by id, and the link is switched on and off', async () => {

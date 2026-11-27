@@ -39,8 +39,8 @@ Say this accurately to the user; never overstate it.
 4. Same bytes twice return the existing proof; it is not charged again.
 5. **A link is public.** `sellat link` publishes a group's name and the name
    of each of its proofs to anyone who has the URL. Run it only when the user
-   asked for a link or agreed to share, and never put in a `--name` or a
-   `--group` anything the user would not show.
+   asked for a link or agreed to share, and never put in a `--name`, a
+   `--group` or a `--note` anything the user would not show.
 
 ## Route A: with a Sellat account (API key)
 
@@ -107,6 +107,12 @@ This needs Route A (an API key): a wallet that pays per call has no groups.
    Stamp the file that is the evidence of the step: what you received, what
    you produced, the receipt a third party gave you. Do not stamp a sentence
    saying that you did something; it proves only that the sentence existed.
+
+   When the name is not enough for a person to understand the step, add one
+   line with `--note "Sent to the client by email on request"` (up to 200
+   characters). The note is your own words: it is shown under the name,
+   labelled as the owner's note, and is **not** part of the proof. Never
+   present it as something the proof confirms.
 3. **Close the job with the link**, once the user wants it shared (rule 5):
 
    ```bash

@@ -3,7 +3,7 @@
  *
  * Hash-only by design — the proof endpoints never accept file contents:
  *
- *   POST   /api/v2/proofs                      { hash, name?, metadata?, qualified?, group? } → 201
+ *   POST   /api/v2/proofs                      { hash, name?, metadata?, qualified?, group?, note? } → 201
  *   GET    /api/v2/proofs/:id                   state, anchors, Bitcoin, seal, URLs
  *   GET    /api/v2/proofs?limit&cursor&group    the account's proofs, or one group's
  *   GET    /api/v2/groups?limit&cursor&name     the account's groups (the dashboard's evidence files)
@@ -120,9 +120,11 @@ export function createClient({
      * Create a proof from a SHA-256. `qualified: true` also issues the qualified
      * seal in the same call. `group` files it under one of the account's groups
      * by name, created the first time: one group for the steps of one job.
+     * `note` is your own line about the file, shown with it in the dashboard and
+     * on the group's link; it is not part of the proof and `''` removes it.
      * Returns the proof object (`id`, `state`, `group`, `urls`…).
      */
-    create({ hash, name, metadata, size, mimeType, qualified, group, idempotencyKey }) {
+    create({ hash, name, metadata, size, mimeType, qualified, group, note, idempotencyKey }) {
       return request('POST', '/api/v2/proofs', {
         body: {
           hash,
@@ -132,6 +134,7 @@ export function createClient({
           ...(mimeType !== undefined ? { mime_type: mimeType } : {}),
           ...(qualified ? { qualified: true } : {}),
           ...(group !== undefined ? { group } : {}),
+          ...(note !== undefined ? { note } : {}),
         },
         headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
       });
