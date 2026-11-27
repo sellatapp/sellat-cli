@@ -54,12 +54,14 @@ and `node:crypto`.
 ## Commands
 
 ```console
-$ sellat stamp <file> [--name <name>] [--meta key=value]... [--qualified] [--store] [--wait]
-$ sellat stamp --hash <sha256> [--name <name>] [--qualified]   # hash computed elsewhere
+$ sellat stamp <file> [--name <name>] [--group <group>] [--meta key=value]... [--qualified] [--store] [--wait]
+$ sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--qualified]   # hash computed elsewhere
 $ sellat status <id>                                         # state, anchors, seal, URLs
 $ sellat watch <id> [--interval <seconds>]                   # poll until anchored
 $ sellat seal <id>                                           # the qualified eIDAS seal
-$ sellat list [--limit <n>] [--cursor <c>]
+$ sellat list [--group <group>] [--limit <n>] [--cursor <c>]
+$ sellat groups [--limit <n>] [--cursor <c>]                 # the account's groups, with their links
+$ sellat link <group> [--off] [--lang es|en|de|fr]           # one public link for the whole group
 $ sellat account                                             # seals left, custody, today's budget
 $ sellat download <id> certificate|evidence|tsr|original [--out <path>] [--lang es|en|de|fr]
 $ sellat original put <id> <file>                            # custody (this one sends the bytes)
@@ -68,6 +70,8 @@ $ sellat original delete <id>                                # end custody; the 
 
 - `--name` defaults to the file name; it is what the certificate and your
   dashboard show.
+- `--group` files the proof under a group, created the first time. See
+  [A whole job](#a-whole-job-one-group-one-link).
 - `--meta` attaches small key=value metadata (4 KB, stored with the proof,
   never published).
 - `--wait` keeps polling until the batch is anchored and then prints the
@@ -118,6 +122,40 @@ Polygon and attested on Bitcoin: altering or quietly removing one archived
 file later leaves a hash that no longer matches any proof. The same pattern
 fits CI artifacts, database exports, invoices, or anything else you produce
 on a schedule and may need to prove later.
+
+## A whole job: one group, one link
+
+One proof shows one moment. A job in several steps — an order, a report, an
+agent's run — reads better as one thing: stamp each step with the same
+`--group` and its own `--name`, and hand over one link at the end.
+
+```console
+$ sellat stamp order.json   --group "Order 1234" --name "1. Order received"
+$ sellat stamp invoice.pdf  --group "Order 1234" --name "2. Invoice sent"
+$ sellat stamp delivery.pdf --group "Order 1234" --name "3. Delivery confirmed"
+$ sellat link "Order 1234"
+group     Order 1234  (3 proofs)
+link      https://sellat.app/en/e/…
+```
+
+Whoever opens the link, without an account, sees the steps in chronological
+order, each one checked at that moment, with its certificate and evidence
+package. A group is what the Sellat dashboard calls an evidence file
+(*expediente*): the same object, so it shows there too.
+
+- **Nothing is public until you run `sellat link`.** From then on, anyone
+  with the URL sees the group's name and each step's name: put nothing in
+  them you would not show. `--meta` is never shown. `sellat link <group>
+  --off` pauses the link; nothing is deleted.
+- **What it shows:** each record existed, exactly as it is, no later than its
+  proven date, and has not changed. It does not show that the step it
+  describes really happened, nor that the group is complete.
+- **Order.** The link orders steps by the date of their anchor. A free
+  account anchors every four hours, so steps stamped within the same slot
+  share one proven date and their order is not proven. If the order matters,
+  put the previous step's SHA-256 inside the next step's file.
+- A proof is in one group; stamping the same bytes again with another
+  `--group` moves it.
 
 ## What a stamp claims
 
