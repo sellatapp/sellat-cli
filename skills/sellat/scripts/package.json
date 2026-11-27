@@ -2,10 +2,11 @@
   "name": "sellat-skill-x402",
   "private": true,
   "type": "module",
-  "description": "Dependencies of x402-stamp.mjs: the official x402 client and viem.",
+  "description": "Dependencies of x402-stamp.mjs (real payments only): the official x402 client and viem, pinned. Install with: npm ci --ignore-scripts",
+  "engines": { "node": ">=18.11" },
   "dependencies": {
-    "@x402/evm": "^2.29.0",
-    "@x402/fetch": "^2.29.0",
-    "viem": "^2.57.13"
+    "@x402/evm": "2.30.0",
+    "@x402/fetch": "2.30.0",
+    "viem": "2.57.16"
   }
 }
