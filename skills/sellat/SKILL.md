@@ -1,12 +1,12 @@
 ---
 name: sellat
-description: Create independently verifiable proof that an exact file or record existed at a given time and has not changed since (proof of existence, timestamping, tamper-evident audit trail). Hashes locally with SHA-256 and sends only the hash; anchors it on Polygon and Bitcoin, with an optional eIDAS qualified timestamp. Use when the user wants to timestamp, notarize, seal or protect a file, contract, photo, dataset, release or log; when an agent must leave evidence of its own outputs, decisions or execution logs; or when checking a file against an existing Sellat proof. Works with a Sellat API key or, without an account, paying per call over x402 (USDC on Base).
+description: Create independently verifiable proof that an exact file or record existed at a given time and has not changed since (proof of existence, timestamping, tamper-evident audit trail). Hashes locally with SHA-256 and sends only the hash; anchors it on Polygon and Bitcoin, with an optional eIDAS qualified timestamp. Use when the user wants to timestamp, notarize, seal or protect a file, contract, photo, dataset, release or log; when an agent must leave evidence of its own outputs, decisions or execution logs; when a job in several steps should end as one verifiable file with a single link a person can open; or when checking a file against an existing Sellat proof. Works with a Sellat API key or, without an account, paying per call over x402 (USDC on Base).
 license: MIT
 compatibility: Requires Node.js 18.11+ and network access to sellat.app. The pay-per-call route also needs the npm packages @x402/fetch, @x402/evm and viem at the versions pinned in scripts/package-lock.json, and a wallet with USDC on Base set up by the user.
 metadata:
   author: sellat
   homepage: https://sellat.app/developers
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Sellat: proof that exact data existed at a time
@@ -37,6 +37,10 @@ Say this accurately to the user; never overstate it.
 3. **Never create, fund or move a wallet yourself.** The pay-per-call route
    uses a wallet the user set up for this purpose, with a spend cap.
 4. Same bytes twice return the existing proof; it is not charged again.
+5. **A link is public.** `sellat link` publishes a group's name and the name
+   of each of its proofs to anyone who has the URL. Run it only when the user
+   asked for a link or agreed to share, and never put in a `--name`, a
+   `--group` or a `--note` anything the user would not show.
 
 ## Route A: with a Sellat account (API key)
 
@@ -51,6 +55,8 @@ npx -y sellat-cli status <id>                          # state, anchors, seal, U
 npx -y sellat-cli seal <id>                            # qualified eIDAS timestamp (paid)
 npx -y sellat-cli download <id> evidence --out ./      # ZIP: certificate, proof.json, .ots, how to verify
 npx -y sellat-cli account                              # today's allowance, timestamps left
+npx -y sellat-cli stamp ./step.pdf --group "Order 1234" --name "2. Invoice sent"   # one step of a job
+npx -y sellat-cli link "Order 1234"                    # one public link for the whole job
 ```
 
 Add `--json` to any command for machine-readable output.
@@ -86,10 +92,70 @@ It never installs packages: the dependencies are pinned in
 `scripts/package-lock.json` and none has install scripts. Use a wallet
 funded only for this, with a small balance.
 
+## A whole job: one group, one link
+
+One proof shows one moment. When a job has several steps and a person will
+have to review it afterwards (an order, a report with its sources, a task you
+were delegated), file every step under one **group** and hand over one link.
+This needs Route A (an API key): a wallet that pays per call has no groups.
+
+1. **Choose the group's name once**, at the start, and reuse it exactly:
+   something the user would recognise, such as `Order 1234` or
+   `Report Q3 – ACME`. The group is created by its first proof; there is
+   nothing to set up and no id to keep.
+2. **Stamp each step when it happens**, with the same `--group` and a
+   `--name` that says what the step is, numbered so the order reads at a
+   glance:
+
+   ```bash
+   npx -y sellat-cli stamp ./brief.md      --group "Report Q3 – ACME" --name "1. Brief received"
+   npx -y sellat-cli stamp ./sources.json  --group "Report Q3 – ACME" --name "2. Sources gathered"
+   npx -y sellat-cli stamp ./report.pdf    --group "Report Q3 – ACME" --name "3. Report delivered"
+   ```
+
+   Stamp the file that is the evidence of the step: what you received, what
+   you produced, the receipt a third party gave you. Do not stamp a sentence
+   saying that you did something; it proves only that the sentence existed.
+
+   When the name is not enough for a person to understand the step, add one
+   line with `--note "Sent to the client by email on request"` (up to 200
+   characters). The note is your own words: it is shown under the name,
+   labelled as the owner's note, and is **not** part of the proof. Never
+   present it as something the proof confirms.
+3. **Close the job with the link**, once the user wants it shared (rule 5):
+
+   ```bash
+   npx -y sellat-cli link "Report Q3 – ACME"            # prints the URL
+   npx -y sellat-cli link "Report Q3 – ACME" --off      # pauses it; nothing is deleted
+   ```
+
+   Whoever opens the URL, without an account, sees the steps in
+   chronological order, each one checked at that moment, and can download
+   the certificate and the evidence package of each. Give the user the URL
+   and tell them it is public for anyone who has it.
+
+Be accurate about what the file shows:
+
+- Each record existed, exactly as it is, no later than its proven date, and
+  has not changed. It does **not** show that the step really happened, that
+  nothing was left out, or that the content is true. Say "the file shows the
+  invoice existed on that date", never "the file proves I sent the invoice".
+- **Order.** The link orders steps by the date of their anchor. A free
+  account anchors every four hours, so steps stamped within the same slot
+  share one proven date and their order is not proven. When the order
+  matters, write the SHA-256 of the previous step's file inside the next
+  step's file before stamping it: then the later one cannot have existed
+  first.
+- A proof is in one group. Stamping the same bytes again with another
+  `--group` moves it there.
+
+`npx -y sellat-cli groups` lists the account's groups and their links;
+`npx -y sellat-cli list --group "Report Q3 – ACME"` lists one group's proofs.
+
 ## Sealing an agent's own records
 
-To leave evidence of what an agent produced or decided, seal the hash of the
-record, not each step:
+For a long run with many small events (tool calls, decisions), a group of
+hundreds of proofs helps nobody. Seal the hash of the record, not each event:
 
 1. Write the run's log as you normally would (JSONL is fine), each entry
    carrying the SHA-256 of the previous one.
@@ -98,7 +164,8 @@ record, not each step:
    and check the proof; altering, removing or reordering an earlier entry
    breaks it.
 
-The log stays on your side; Sellat only sees the hash.
+The log stays on your side; Sellat only sees the hash. The two fit together:
+file that sealed log as one step of the job's group.
 
 ## Verifying a proof
 

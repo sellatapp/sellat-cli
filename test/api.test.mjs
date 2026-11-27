@@ -117,3 +117,57 @@ test('isAnchored reads the lifecycle', () => {
   assert.equal(isAnchored({ state: 'anchored' }), true);
   assert.equal(isAnchored({ state: 'confirmed' }), true);
 });
+
+test('group: create files the proof by name, list filters by group id', async () => {
+  const calls = [];
+  const client = createClient({
+    token: 't',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return jsonResponse({ id: 'abc', group: { id: 'g1', name: 'Order 1234' }, data: [] });
+    },
+  });
+  const proof = await client.create({ hash: 'f'.repeat(64), name: '1. Order received', group: 'Order 1234' });
+  assert.equal(proof.group.id, 'g1');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { hash: 'f'.repeat(64), name: '1. Order received', group: 'Order 1234' });
+
+  await client.create({ hash: 'f'.repeat(64) });
+  assert.equal('group' in JSON.parse(calls[1].options.body), false);
+
+  await client.list({ group: 'g1', limit: 5 });
+  assert.equal(calls[2].url, 'https://sellat.app/api/v2/proofs?limit=5&group=g1');
+
+  // The note travels only when given; an empty one is sent, because it removes the note.
+  await client.create({ hash: 'f'.repeat(64), note: 'Invoice sent to the client' });
+  assert.equal(JSON.parse(calls[3].options.body).note, 'Invoice sent to the client');
+  await client.create({ hash: 'f'.repeat(64), note: '' });
+  assert.equal(JSON.parse(calls[4].options.body).note, '');
+});
+
+test('groups: found by name, read by id, and the link is switched on and off', async () => {
+  const calls = [];
+  const client = createClient({
+    token: 't',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, method: options.method, body: options.body });
+      return jsonResponse({ enabled: options.method === 'POST', url: 'https://sellat.app/en/e/x', data: [] });
+    },
+  });
+  await client.groups({ name: 'Order 1234', limit: 1 });
+  await client.group('g 1');
+  const on = await client.openLink('g1', { lang: 'es' });
+  const off = await client.closeLink('g1');
+  assert.deepEqual(
+    calls.map((c) => `${c.method} ${c.url}`),
+    [
+      'GET https://sellat.app/api/v2/groups?limit=1&name=Order+1234',
+      'GET https://sellat.app/api/v2/groups/g%201',
+      'POST https://sellat.app/api/v2/groups/g1/link?lang=es',
+      'DELETE https://sellat.app/api/v2/groups/g1/link',
+    ]
+  );
+  assert.equal(on.enabled, true);
+  assert.equal(off.enabled, false);
+  // No body on either: the link carries no data of its own.
+  assert.equal(calls[2].body, undefined);
+});

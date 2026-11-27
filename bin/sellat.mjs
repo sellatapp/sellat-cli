@@ -8,12 +8,15 @@ import { fileSize, mimeTypeFor, nameFromFilename, sha256File } from '../src/hash
 const HELP = `sellat — proof of existence from your terminal (https://sellat.app)
 
 Usage:
-  sellat stamp <file> [--name <name>] [--meta key=value]... [--qualified] [--store] [--wait]
-  sellat stamp --hash <sha256> [--name <name>] [--meta key=value]... [--qualified]
+  sellat stamp <file> [--name <name>] [--group <group>] [--note <text>] [--meta key=value]... [--qualified] [--store] [--wait]
+  sellat stamp --hash <sha256> [--name <name>] [--group <group>] [--note <text>] [--meta key=value]... [--qualified]
   sellat status <id>                      the proof as it stands now
   sellat watch <id> [--interval <s>]      poll until the batch is anchored
   sellat seal <id>                        add the qualified eIDAS seal
-  sellat list [--limit <n>] [--cursor <c>]
+  sellat list [--group <group>] [--limit <n>] [--cursor <c>]
+  sellat groups [--limit <n>] [--cursor <c>]   the account's groups, with their links
+  sellat link <group> [--off] [--lang <es|en|de|fr>]
+                                          one public link for the whole group; --off pauses it
   sellat account                          seals left, custody, today's budget
   sellat download <id> <certificate|evidence|tsr|original> [--out <path>] [--lang <es|en|de|fr>]
   sellat original put <id> <file>         keep the original in custody (sends the bytes)
@@ -21,6 +24,15 @@ Usage:
 
 The file is hashed locally; only its SHA-256 leaves your machine. The one
 exception is "--store" / "original put", which you ask for explicitly.
+
+A group is one job in several steps: stamp each step with the same --group
+and its own --name, then "sellat link" gives one URL where a person reads the
+steps in order and checks each one, without an account. Nothing is public
+until you run "sellat link"; whoever has the URL sees the group's name and
+each step's name and note. <group> is the name you used, or the group's id.
+--note is one optional line about the file (up to 200 characters); it is
+shown with it, is not part of the proof, and stamping the same file again
+with another --note replaces it.
 
 Add --json to any command to get the API's answer as is.
 
@@ -41,6 +53,9 @@ const { values, positionals } = parseArgs({
     cursor: { type: 'string' },
     out: { type: 'string' },
     lang: { type: 'string' },
+    group: { type: 'string' },
+    note: { type: 'string' },
+    off: { type: 'boolean' },
     qualified: { type: 'boolean' },
     store: { type: 'boolean' },
     wait: { type: 'boolean' },
@@ -94,6 +109,8 @@ function printProof(proof) {
   }
   console.log(`id        ${proof.id}`);
   if (proof.name) console.log(`name      ${proof.name}`);
+  if (proof.group) console.log(`group     ${proof.group.name}  (${proof.group.id})`);
+  if (proof.note) console.log(`note      ${proof.note}`);
   console.log(`state     ${proof.state}`);
   console.log(`hash      ${proof.hash}`);
   for (const a of proof.anchors ?? []) {
@@ -117,8 +134,28 @@ function printProof(proof) {
     if (proof.urls.certificate) console.log(`cert      ${proof.urls.certificate}`);
   }
   if (proof.limitations?.length) {
-    console.log(`note      ${proof.limitations.join(', ')}`);
+    console.log(`limits    ${proof.limitations.join(', ')}`);
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A group given by id or by the name it was filed under. */
+async function resolveGroup(client, ref) {
+  if (UUID.test(ref)) {
+    return client.group(ref, { lang: values.lang });
+  }
+  const page = await client.groups({ name: ref, limit: 1, lang: values.lang });
+  if (!page.data?.length) {
+    fail(`no group named "${ref}" on this account. See: sellat groups`);
+  }
+  return page.data[0];
+}
+
+function printGroup(group) {
+  const link = group.link ? (group.link.enabled ? group.link.url : 'paused') : 'off';
+  console.log(`${group.id}  ${String(group.proofs).padStart(4)} proofs  ${group.name}`);
+  console.log(`${' '.repeat(38)}link: ${link}`);
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -171,6 +208,8 @@ try {
       mimeType,
       metadata: parseMetadata(values.meta),
       qualified: values.qualified,
+      group: values.group,
+      note: values.note,
     });
     printProof(proof);
     if (proof.created === false && !values.json) {
@@ -212,7 +251,9 @@ try {
       console.log(`qualified ${result.qualified?.state ?? 'pending'} — ${result.message ?? 'run "sellat seal" again in a moment.'}`);
     }
   } else if (command === 'list') {
-    const page = await makeClient().list({ limit: values.limit, cursor: values.cursor });
+    const client = makeClient();
+    const group = values.group ? (await resolveGroup(client, values.group)).id : undefined;
+    const page = await client.list({ limit: values.limit, cursor: values.cursor, group });
     if (values.json) {
       console.log(JSON.stringify(page, null, 2));
     } else {
@@ -220,6 +261,32 @@ try {
         console.log(`${p.id}  ${p.state.padEnd(9)}  ${short(p.hash)}  ${p.qualified ? 'sealed  ' : '        '}${p.name ?? ''}`);
       }
       if (page.next_cursor) console.log(`\nmore: sellat list --cursor ${page.next_cursor}`);
+    }
+  } else if (command === 'groups') {
+    const page = await makeClient().groups({ limit: values.limit, cursor: values.cursor, lang: values.lang });
+    if (values.json) {
+      console.log(JSON.stringify(page, null, 2));
+    } else {
+      for (const g of page.data) printGroup(g);
+      if (!page.data.length) console.log('No groups yet. Stamp with --group <name> to start one.');
+      if (page.next_cursor) console.log(`\nmore: sellat groups --cursor ${page.next_cursor}`);
+    }
+  } else if (command === 'link') {
+    const [ref] = args;
+    if (!ref) fail('link needs a <group>: the name you stamped with, or its id.');
+    const client = makeClient();
+    const group = await resolveGroup(client, ref);
+    const link = values.off
+      ? await client.closeLink(group.id, { lang: values.lang })
+      : await client.openLink(group.id, { lang: values.lang });
+    if (values.json) {
+      console.log(JSON.stringify({ group: { id: group.id, name: group.name, proofs: group.proofs }, link }, null, 2));
+    } else if (values.off) {
+      console.log(`link      paused — the URL no longer opens. Nothing was deleted.`);
+    } else {
+      console.log(`group     ${group.name}  (${group.proofs} proofs)`);
+      console.log(`link      ${link.url}`);
+      console.log('\nAnyone with this link sees the group\'s name and each proof\'s name, and can check them without an account.');
     }
   } else if (command === 'account') {
     const a = await makeClient().account();

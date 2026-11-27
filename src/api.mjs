@@ -3,9 +3,13 @@
  *
  * Hash-only by design — the proof endpoints never accept file contents:
  *
- *   POST   /api/v2/proofs                      { hash, name?, metadata?, qualified? } → 201
+ *   POST   /api/v2/proofs                      { hash, name?, metadata?, qualified?, group?, note? } → 201
  *   GET    /api/v2/proofs/:id                   state, anchors, Bitcoin, seal, URLs
- *   GET    /api/v2/proofs?limit&cursor          the account's proofs
+ *   GET    /api/v2/proofs?limit&cursor&group    the account's proofs, or one group's
+ *   GET    /api/v2/groups?limit&cursor&name     the account's groups (the dashboard's evidence files)
+ *   GET    /api/v2/groups/:id                   one group: name, proofs, link
+ *   POST   /api/v2/groups/:id/link              switch the group's public link on
+ *   DELETE /api/v2/groups/:id/link              pause it
  *   POST   /api/v2/proofs/:id/qualified         the qualified eIDAS seal
  *   GET    /api/v2/proofs/:id/qualified.tsr     the RFC 3161 token
  *   GET    /api/v2/proofs/:id/certificate.pdf   the certificate
@@ -109,13 +113,18 @@ export function createClient({
   }
 
   const proofPath = (id) => `/api/v2/proofs/${encodeURIComponent(id)}`;
+  const groupPath = (id) => `/api/v2/groups/${encodeURIComponent(id)}`;
 
   return {
     /**
      * Create a proof from a SHA-256. `qualified: true` also issues the qualified
-     * seal in the same call. Returns the proof object (`id`, `state`, `urls`…).
+     * seal in the same call. `group` files it under one of the account's groups
+     * by name, created the first time: one group for the steps of one job.
+     * `note` is your own line about the file, shown with it in the dashboard and
+     * on the group's link; it is not part of the proof and `''` removes it.
+     * Returns the proof object (`id`, `state`, `group`, `urls`…).
      */
-    create({ hash, name, metadata, size, mimeType, qualified, idempotencyKey }) {
+    create({ hash, name, metadata, size, mimeType, qualified, group, note, idempotencyKey }) {
       return request('POST', '/api/v2/proofs', {
         body: {
           hash,
@@ -124,6 +133,8 @@ export function createClient({
           ...(size !== undefined ? { size } : {}),
           ...(mimeType !== undefined ? { mime_type: mimeType } : {}),
           ...(qualified ? { qualified: true } : {}),
+          ...(group !== undefined ? { group } : {}),
+          ...(note !== undefined ? { note } : {}),
         },
         headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
       });
@@ -134,13 +145,43 @@ export function createClient({
       return request('GET', proofPath(id));
     },
 
-    /** One page of the account's proofs, newest first. */
-    list({ limit, cursor } = {}) {
+    /** One page of the account's proofs, newest first. `group` (an id) keeps one group's. */
+    list({ limit, cursor, group } = {}) {
       const params = new URLSearchParams();
       if (limit) params.set('limit', String(limit));
       if (cursor) params.set('cursor', String(cursor));
+      if (group) params.set('group', String(group));
       const query = params.toString();
       return request('GET', `/api/v2/proofs${query ? `?${query}` : ''}`);
+    },
+
+    /** One page of the account's groups, newest first. `name` finds one group by its exact name. */
+    groups({ limit, cursor, name, lang } = {}) {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', String(limit));
+      if (cursor) params.set('cursor', String(cursor));
+      if (name) params.set('name', String(name));
+      if (lang) params.set('lang', String(lang));
+      const query = params.toString();
+      return request('GET', `/api/v2/groups${query ? `?${query}` : ''}`);
+    },
+
+    /** One group: its name, how many proofs it holds and its link. */
+    group(id, { lang } = {}) {
+      return request('GET', `${groupPath(id)}${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+    },
+
+    /**
+     * Switch the group's public link on. Whoever holds the URL sees the group's
+     * name and each proof's name, without an account. Nothing is public before this.
+     */
+    openLink(id, { lang } = {}) {
+      return request('POST', `${groupPath(id)}/link${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
+    },
+
+    /** Pause the link: the URL stops opening until it is switched on again. */
+    closeLink(id, { lang } = {}) {
+      return request('DELETE', `${groupPath(id)}/link${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`);
     },
 
     /** The qualified eIDAS seal. Spends a seal from the account; 402 when there is none. */
